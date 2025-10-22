@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from models import torchRNN,seq2oneRNN
+from models import SimpleTransformer
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -42,8 +42,42 @@ def text2vec(text_path = 'shakespeare.txt',sent_size = 32):
     return text_vector_list
 
 
+def text2SeqPair(text_path = 'shakespeare.txt',sent_size = 32):
+    text = open(text_path).read()
+    tokenize_sentences = sent_tokenize(text)
+    tokenize_sentences_with_missing = [tokenize_sentences]
+    model = Word2Vec.load('word2vec.model')
 
-def main():
+
+    text_vector_list = []
+
+    for sent in tokenize_sentences:
+        sent_list = []
+        sent_list_with_missing = []
+        word_list = word_tokenize(sent)
+        missing_word = random.choice(word_list)
+        index = word_list.index(missing_word)
+        for word_index in range(sent_size):
+            unk_flag = False
+            if word_index < len(word_tokenize(sent)) :
+                word = word_list[word_index]
+                model.wv[word]
+            else:
+                word = '<pad>'
+
+            word_embedding = model.wv[word]
+            sent_list_with_missing.append(word_embedding)
+            if random.random() < 0.1 and not unk_flag and word != '<pad>':
+                word = '<unk>'
+                unk_flag = True
+
+            word_embedding = model.wv[word]
+            sent_list.append(word_embedding)
+
+        text_vector_list.append([sent_list,sent_list_with_missing])
+    return text_vector_list
+
+'''def main():
 
     list_of_vectors = text2vec()
     hid_size = 100
@@ -74,11 +108,31 @@ def main():
         print('pred_word',pred_word)
         print('missing_word',Word2Vec.load('word2vec.model').wv.most_similar(positive=[missing_word.squeeze().detach().numpy()], topn=1))
     plt.ylabel('loss')
-    plt.show()
+    plt.show()'''
+
+
+def main():
+
+    list_of_vectors = text2vec()
+    hid_size = 100
+
+    myTransformer = SimpleTransformer(100,100,hid_size)
+    data = text2SeqPair()
+    criterion = nn.MSELoss()
+    optimizer = optim.SGD(myTransformer.parameters(), lr=0.1)
+    total_loss = 0
+    loss_list = []
+    for pair in data:
+        word_list, word_list_original = pair
+        word_list_tensor = torch.FloatTensor(word_list)
+        word_list_original_tensor = torch.FloatTensor(word_list_original)
+        pred = myTransformer.forward(word_list_tensor,word_list_original_tensor)
+        print('pred',pred)
+
 
 if __name__ == "__main__":
     main()
-
+    #text2SeqPair()
 
 
 
