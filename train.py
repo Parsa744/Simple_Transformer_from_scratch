@@ -1,193 +1,58 @@
 import numpy as np
-import matplotlib.pyplot as plt
+
+from dataloder import load_data , vec2eng , vec2de
 from models import SimpleTransformer
 import torch
-import torch.nn as nn
-import torch.optim as optim
-import os
-import urllib.request
-from nltk.tokenize import sent_tokenize, word_tokenize
-import nltk
-from gensim.models import Word2Vec
-import random
-
-
-nltk.download('punkt_tab')
-
-def text2vec(text_path = 'shakespeare.txt',sent_size = 32):
-    text = open(text_path).read()
-    tokenize_sentences = sent_tokenize(text)
-    model = Word2Vec.load('word2vec.model')
-
-
-    text_vector_list = []
-
-    for sent in tokenize_sentences:
-        sent_list = []
-        word_list = word_tokenize(sent)
-        missing_word = random.choice(word_list)
-        index = word_list.index(missing_word)
-        word_list[index] = '<unk>'
-
-        for word_index in range(sent_size):
-            if word_index < len(word_tokenize(sent)):
-                word = word_list[word_index]
-            else:
-                word = '<pad>'
-            sent_list.append(model.wv[word])
-
-        text_vector_list.append([sent_list,model.wv[missing_word]])
-
-    #print(len(text_vector_list[3]))
-    return text_vector_list
-
-
-def text2SeqPair(text_path = 'shakespeare.txt',sent_size = 32):
-    text = open(text_path).read()
-    tokenize_sentences = sent_tokenize(text)
-    tokenize_sentences_with_missing = [tokenize_sentences]
-    model = Word2Vec.load('word2vec.model')
-
-
-    text_vector_list = []
-
-    for sent in tokenize_sentences:
-        sent_list = []
-        sent_list_with_missing = []
-        word_list = word_tokenize(sent)
-        missing_word = random.choice(word_list)
-        index = word_list.index(missing_word)
-        for word_index in range(sent_size):
-            unk_flag = False
-            if word_index < len(word_tokenize(sent)) :
-                word = word_list[word_index]
-                model.wv[word]
-            else:
-                word = '<pad>'
-
-            word_embedding = model.wv[word]
-            sent_list_with_missing.append(word_embedding)
-            if random.random() < 0.1 and not unk_flag and word != '<pad>':
-                word = '<unk>'
-                unk_flag = True
-
-            word_embedding = model.wv[word]
-            sent_list.append(word_embedding)
-
-        text_vector_list.append([sent_list,sent_list_with_missing])
-    return text_vector_list
-
-'''def main():
-
-    list_of_vectors = text2vec()
-    hid_size = 100
-
-    myRNN = seq2oneRNN(100,hid_size,100)
-    criterion = nn.MSELoss()
-    optimizer = optim.SGD(myRNN.parameters(), lr=0.1)
-    total_loss = 0
-    H0 = torch.zeros(hid_size, 1)  # Initialize as tensor with correct shape
-    loss_list = []
-    for sentence in list_of_vectors:
-        optimizer.zero_grad()
-        input = sentence[0]
-        missing_word = sentence[1]
-        pred, _ = myRNN.forward_for_seq(input_seq=input, hidden=H0)
-        missing_word = torch.FloatTensor(missing_word).unsqueeze(1)
-
-
-        loss = criterion(pred, missing_word)
-
-        #print(loss)
-        total_loss+=loss
-        loss_list.append(loss.item())
-
-        loss.backward()
-        optimizer.step()
-        pred_word = Word2Vec.load('word2vec.model').wv.most_similar(positive=[pred.squeeze().detach().numpy()], topn=1)
-        print('pred_word',pred_word)
-        print('missing_word',Word2Vec.load('word2vec.model').wv.most_similar(positive=[missing_word.squeeze().detach().numpy()], topn=1))
-    plt.ylabel('loss')
-    plt.show()'''
+import matplotlib.pyplot as plt
 
 
 def main():
+    train_df , test_df = load_data()
+    contex_size = 300
 
-    list_of_vectors = text2vec()
-    hid_size = 100
+    input_size = 300
+    hidden_dim = 300
+    batch_size = 1
 
-    myTransformer = SimpleTransformer(100,100,hid_size)
-    data = text2SeqPair()
-    criterion = nn.MSELoss()
-    optimizer = optim.SGD(myTransformer.parameters(), lr=0.1)
-    total_loss = 0
-    loss_list = []
-    for pair in data:
-        word_list, word_list_original = pair
-        word_list_tensor = torch.FloatTensor(word_list)
-        word_list_original_tensor = torch.FloatTensor(word_list_original)
-        pred = myTransformer.forward(word_list_tensor,word_list_original_tensor)
-        print('pred',pred)
+    transformer = SimpleTransformer(input_size, contex_size, hidden_dim)
+    optim = torch.optim.SGD(transformer.parameters(), lr=1e-2, momentum=0.9)
+    losses = []
+    counter = 0
+    for idx, row in train_df.iterrows():
+        de_sentence = row[0]  # German sentence vectors (list of vectors)
+        eng_sentence = row[1]  # English sentence vectors (list of vectors)
+
+        # Convert to tensors
+        de_tensor = torch.tensor(de_sentence, dtype=torch.float32).unsqueeze(0)  # Add batch dimension
+        eng_tensor = torch.tensor(eng_sentence, dtype=torch.float32).unsqueeze(0)  # Add batch dimension
 
 
-if __name__ == "__main__":
+        # Forward pass
+        pred = transformer.forward(de_tensor, eng_tensor)
+        pred = pred.squeeze(0)  # Remove batch dimension
+        loss = torch.nn.MSELoss()
+        target = eng_tensor
+        output = loss(pred, target)
+        print('output loss:', output.item())
+        optim.zero_grad()
+        output.backward()
+        optim.step()
+        losses.append(output.item())
+        counter += 1
+        if counter % 100 == 0:
+            # TODO: translate back to words and print
+            print(f'Iteration {counter}, Loss: {output.item()}')
+
+    # save the model
+    torch.save(transformer.state_dict(), 'transformer_model.pth')
+    # plot the losses
+    plt.plot(losses)
+    plt.xlabel('Iteration')
+    plt.ylabel('Loss')
+    plt.title('Training Loss over Iterations')
+    plt.show()
+
+
+
+if __name__ == '__main__':
     main()
-    #text2SeqPair()
-
-
-
-
-
-
-
-
-
-
-    '''def main():
-    text2List()
-
-
-
-    x1 = [1,2,2]
-    Y1 = [0,2,0,4]
-    H0 = [0,0,0,0]
-    x2 = [1,2,4]
-    Y2 = [3,0,1,1]
-    x3 = [3,0,5]
-    Y3 = [5,2,7,3]
-    x4 = [5,6,7]
-    Y4 = [3,4,9,2]
-    myRNN = torchRNN(3,4,4)
-
-    criterion = nn.MSELoss()
-    optimizer = optim.SGD(myRNN.parameters(), lr=0.1)
-
-    Yp1,H1 = myRNN.forward(input=x1,hidden=H0)
-
-    loss = criterion(Yp1,torch.FloatTensor(data=Y1).unsqueeze(1))
-    optimizer.zero_grad()
-
-    print('loss',loss)
-
-    Yp2,H2 = myRNN.forward(input=x2,hidden=H1)
-
-
-    loss = criterion(Yp2,torch.FloatTensor(data=Y2).unsqueeze(1))
-
-    print('loss',loss)
-
-    Yp3,H3 = myRNN.forward(input=x3,hidden=H2)
-
-    loss = criterion(Yp3,torch.FloatTensor(data=Y3).unsqueeze(1))
-
-    print('loss',loss)
-
-
-    Yp4,H4 = myRNN.forward(input=x4,hidden=H3)
-
-
-    loss = criterion(Yp4,torch.FloatTensor(data=Y4).unsqueeze(1))
-    loss.backward()
-    optimizer.step()
-    print('loss',loss)
-'''

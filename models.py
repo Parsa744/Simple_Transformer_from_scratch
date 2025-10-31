@@ -28,7 +28,7 @@ class CrossAttention(nn.Module):
         Q = self.Q(inputs)
         K = self.K(context)
         V = self.V(context)
-        print("Q,K,V shapes",Q.shape,K.shape,V.shape)
+        #print("Q,K,V shapes",Q.shape,K.shape,V.shape)
         A = torch.softmax(torch.matmul(Q, torch.transpose(K, -2, -1)) / math.sqrt(K.size(-1)), dim=-1)
         Attention = torch.matmul(A,V)
         return Attention
