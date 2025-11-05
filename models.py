@@ -39,6 +39,8 @@ class FeedForwaed(nn.Module):
         self.f1 = nn.Linear(input_size,hidden_dim)
         self.relu = nn.ReLU()
         self.f2 = nn.Linear(hidden_dim,input_size)
+
+
     def forward(self,inputs):
         f1 = self.f1(inputs)
         relu = self.relu(f1)
@@ -56,18 +58,28 @@ class SimpleTransformer(nn.Module):
         self.SelfAtt2 = SelfAttention(input_size)
         self.CrossAtt1 = CrossAttention(input_size,contex_size,hidden_dim)
         self.FF2 = FeedForwaed(hidden_dim,input_size)
-    def forward(self,inputs,context):
-        Att1 = self.SelfAtt1(inputs)
-        #print("Att1 shape",Att1.shape)
-        FF1 = self.FF1(Att1)
-        #print("FF1 shape",FF1.shape)
-        Att2 = self.SelfAtt2(FF1)
-        #print("Att2 shape",Att2.shape)
-        CrossAtt = self.CrossAtt1(Att2, context)
-        #print("context shape",context.shape)
-        #print("CrossAtt shape",CrossAtt.shape)
-        FF2 = self.FF2(CrossAtt)
-        #print("FF2 shape",FF2.shape)
+        self.ln1 = nn.LayerNorm(input_size)
+        self.ln2 = nn.LayerNorm(input_size)
+        self.ln3 = nn.LayerNorm(input_size)
+        self.ln4 = nn.LayerNorm(input_size)
+        self.ln5 = nn.LayerNorm(input_size)
+
+    def forward(self,inputs,context,norm=True):
+        Att1 = inputs + self.SelfAtt1(inputs)  # ADD original input back
+        # normalize Att1
+        Att1 = self.ln1(Att1)
+        FF1 = Att1 + self.FF1(Att1)  # ADD Att1 back
+        if norm:
+            FF1 = self.ln2(FF1)
+        Att2 = FF1 + self.SelfAtt2(FF1)  # ADD FF1 back
+        if norm:
+            Att2 = self.ln3(Att2)
+        CrossAtt = Att2 + self.CrossAtt1(Att2,context)  # ADD Att2 back
+        if norm:
+            CrossAtt = self.ln4(CrossAtt)
+        FF2 = CrossAtt + self.FF2(CrossAtt)
+        if norm:
+            FF2 = self.ln5(FF2)
         return FF2
 
 def testCrossAttention():
